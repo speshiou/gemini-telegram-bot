@@ -2,6 +2,7 @@ import traceback
 import logging
 import html
 import json
+from pathlib import Path
 
 # Enable logging
 logging.basicConfig(
@@ -34,6 +35,7 @@ import google.generativeai as genai
 
 import config
 import gemini_utils
+import telegram_utils
 
 BOT_COMMANDS = [
     BotCommand("reset", "clear the chat history"),
@@ -52,9 +54,31 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # send typing action
     await update.effective_chat.send_action(action="typing")
 
-    model = genai.GenerativeModel(gemini_utils.MODEL_GEMINI_PRO)
-    message = update.message.text
-    response = model.generate_content(message)
+    model = gemini_utils.MODEL_GEMINI_PRO
+
+    photo_path: Path = None
+
+    # when replying to a photo
+    if update.effective_message.reply_to_message and update.effective_message.reply_to_message.photo:
+        # download the photo to the tmp dir
+        photo_size = telegram_utils.get_largest_photo_size(update.effective_message.reply_to_message.photo)
+        photo_file = await context.bot.get_file(photo_size.file_id)
+        photo_path = Path('/tmp/images').joinpath(photo_file.file_unique_id)
+        if not photo_path.exists():
+            await photo_file.download_to_drive(photo_path)
+        # Telegram always compresses photos to the jpeg format
+        img = {
+            'mime_type': 'image/jpeg',
+            'data': photo_path.read_bytes()
+        }
+        content = [update.message.text, img]
+        # switch to the vision model to handle the image
+        model = gemini_utils.MODEL_GEMINI_PRO_VISION
+    else:
+        content = update.message.text
+
+    gen_model = genai.GenerativeModel(model)
+    response = gen_model.generate_content(content)
     await update.message.reply_text(response.text)
 
 async def reset_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
