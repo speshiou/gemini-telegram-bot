@@ -36,6 +36,7 @@ import google.generativeai as genai
 import config
 import gemini_utils
 import telegram_utils
+from datastore import Datastore
 
 BOT_COMMANDS = [
     BotCommand("reset", "clear the chat history"),
@@ -43,20 +44,26 @@ BOT_COMMANDS = [
 
 genai.configure(api_key=config.GOOGLE_AI_API_KEY)
 
+datastore: Datastore = Datastore()
+
 async def app_post_init(application: Application) -> None:
     # setup bot commands
     await application.bot.set_my_commands(BOT_COMMANDS)
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    datastore.upsert_chat(chat_id=update.effective_chat.id)
     await update.message.reply_text("Hi! I'm an AI chatbot powered by Gemini Pro Vision model. Feel free to ask me anything.")
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    datastore.upsert_chat(chat_id=update.effective_chat.id)
     # send typing action
     await update.effective_chat.send_action(action="typing")
 
-    model = gemini_utils.MODEL_GEMINI_PRO
+    model_name = gemini_utils.MODEL_GEMINI_PRO
 
     photo_path: Path = None
+
+    new_message = update.message.text
 
     # when replying to a photo
     if update.effective_message.reply_to_message and update.effective_message.reply_to_message.photo:
@@ -71,20 +78,37 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             'mime_type': 'image/jpeg',
             'data': photo_path.read_bytes()
         }
-        content = [update.message.text, img]
+        content = [new_message, img]
         # switch to the vision model to handle the image
-        model = gemini_utils.MODEL_GEMINI_PRO_VISION
+        model_name = gemini_utils.MODEL_GEMINI_PRO_VISION
     else:
-        content = update.message.text
+        content = new_message
 
-    gen_model = genai.GenerativeModel(model)
-    response = gen_model.generate_content(content)
-    await update.message.reply_text(response.text)
+    # load chat history
+    chat_history = datastore.get_chat_history(chat_id=update.effective_chat.id)
+    history = gemini_utils.build_history(raw_history=chat_history)
+
+    model = genai.GenerativeModel(model_name)
+    # start a chat sessoin with history
+    chat = model.start_chat(history=history)
+    response = chat.send_message(content)
+    new_model_message = response.text
+    await update.message.reply_text(new_model_message)
+    # persist chat history
+    datastore.push_chat_history(
+        chat_id=update.effective_chat.id, 
+        user_message=new_message,
+        model_message=new_model_message,
+    )
 
 async def reset_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    datastore.upsert_chat(chat_id=update.effective_chat.id)
     if update.callback_query:
         query = update.callback_query
         await query.answer()
+
+    datastore.clear_chat_history(chat_id=update.effective_chat.id)
+    await update.message.reply_text("Cleared chat history!")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and send a telegram message to notify the developer."""
@@ -134,7 +158,7 @@ def run_bot() -> None:
         user_filter = filters.User(username=config.ALLOWED_TELEGRAM_USERNAMES)
 
     application.add_handler(CommandHandler("start", start_handler, filters=user_filter))
-    application.add_handler(CallbackQueryHandler(reset_command_handler, pattern="^reset"))
+    application.add_handler(CommandHandler("reset", reset_command_handler, filters=user_filter))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & user_filter, message_handler))
     application.add_error_handler(error_handler)
     

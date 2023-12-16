@@ -165,3 +165,6 @@ pyvenv.cfg
 
 # system
 .DS_Store
+
+# default database directory
+mongodb
