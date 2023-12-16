@@ -60,9 +60,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.effective_chat.send_action(action="typing")
 
     model_name = gemini_utils.MODEL_GEMINI_PRO
-
     photo_path: Path = None
-
     new_message = update.message.text
 
     # when replying to a photo
@@ -84,22 +82,31 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     else:
         content = new_message
 
-    # load chat history
+    # fetch the chat history
     chat_history = datastore.get_chat_history(chat_id=update.effective_chat.id)
     history = gemini_utils.build_history(raw_history=chat_history)
 
     model = genai.GenerativeModel(model_name)
-    # start a chat sessoin with history
+    # load the chat history
     chat = model.start_chat(history=history)
-    response = chat.send_message(content)
-    new_model_message = response.text
-    await update.message.reply_text(new_model_message)
-    # persist chat history
-    datastore.push_chat_history(
-        chat_id=update.effective_chat.id, 
-        user_message=new_message,
-        model_message=new_model_message,
-    )
+    new_model_message = ""
+    try:
+        response = await chat.send_message_async(content, stream=True)
+        placeholder = await update.message.reply_text("...")
+        # stream the response
+        async for chunk in response:
+            new_model_message += chunk.text
+            await placeholder.edit_text(new_model_message)
+    except Exception as e:
+        logger.error(f"Exception: {e}")
+    finally:
+        if new_model_message:
+            # persist chat history
+            datastore.push_chat_history(
+                chat_id=update.effective_chat.id, 
+                user_message=new_message,
+                model_message=new_model_message,
+            )
 
 async def reset_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     datastore.upsert_chat(chat_id=update.effective_chat.id)
