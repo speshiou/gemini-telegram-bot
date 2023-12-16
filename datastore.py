@@ -41,7 +41,7 @@ class Datastore:
         doc = self.chat_collection.find_one(filter)
         return doc["history"] if doc else []
     
-    def push_chat_history(self, chat_id: int, user_message: str, model_message: str, trim_history: int = 0):
+    def push_chat_history(self, chat_id: int, user_message: str, model_message: str, num_max_history: int = -1):
         filter = {
             "_id": chat_id
         }
@@ -51,14 +51,14 @@ class Datastore:
             "model": model_message,
         }
 
-        if trim_history > 0:
+        if num_max_history > 0:
             self.chat_collection.update_one(
                 filter,
                 {
                     "$push": {
                         "history": {
                             "$each": [ new_messages ],
-                            "$slice": -trim_history,
+                            "$slice": -num_max_history,
                         }
                     }
                 }

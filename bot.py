@@ -106,6 +106,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 chat_id=update.effective_chat.id, 
                 user_message=new_message,
                 model_message=new_model_message,
+                num_max_history=config.CHAT_HISTORY_LIMIT if len(chat_history) + 1 >= config.CHAT_HISTORY_LIMIT else -1
             )
 
 async def reset_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
