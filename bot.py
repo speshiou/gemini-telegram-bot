@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 from telegram import (
     BotCommand, 
-    Update, 
+    Update,
 )
 
 from telegram.ext import (
@@ -24,9 +24,12 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     filters,
     ContextTypes,
+)
+
+from telegram.constants import (
+    ParseMode,
 )
 
 from telegram.constants import ParseMode
@@ -97,6 +100,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         async for chunk in response:
             new_model_message += chunk.text
             await placeholder.edit_text(new_model_message)
+        await placeholder.edit_text(new_model_message, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         logger.error(f"Exception: {e}")
     finally:
