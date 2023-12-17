@@ -6,7 +6,9 @@ A Telegram bot powered by Google's Gemini Generative AI model.
 * Streams the response
 * Formatted responses
 ## Setup
-Create a Docker environment file with the following minimum content:
+1. Create a Google AI Key using [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Create a Telegram bot using [@BotFather](https://t.me/BotFather)
+3. Create a Docker environment file with the following minimum content:
 ```
 TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 GOOGLE_AI_API_KEY=YOUR_GOOGLE_AI_API_KEY
